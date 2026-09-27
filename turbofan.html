@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta name="robots" content="noindex">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>터보팬 엔진 작동 시뮬레이션</title>
+<style>
+  :root{
+    --bg:#0d1420; --panel:#16202e; --panel2:#1d2a3c; --line:#2a3a50;
+    --txt:#e6edf5; --dim:#8fa3ba; --blue:#4da3ff; --cyan:#48d6e0;
+    --hot:#ff7a2f; --yellow:#ffd24a; --green:#5ddb8a;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+    font-family:-apple-system,"Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+    font-size:14px;line-height:1.6}
+  header{padding:14px 20px;border-bottom:1px solid var(--line);background:var(--panel)}
+  header h1{margin:0;font-size:18px;letter-spacing:-.2px}
+  header p{margin:2px 0 0;color:var(--dim);font-size:12.5px}
+  .wrap{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(355px,1fr);gap:14px;padding:14px;
+    max-width:1540px;margin:0 auto}
+  @media(max-width:1100px){.wrap{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+  .card h2{margin:0 0 10px;font-size:12px;color:var(--dim);font-weight:700;letter-spacing:.5px}
+  canvas{display:block;width:100%;border-radius:8px;background:#080d14}
+  .ctl{margin-bottom:13px}
+  .ctl label{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px}
+  .ctl label b{font-weight:600;font-size:13.5px}
+  .ctl label span{color:var(--cyan);font-variant-numeric:tabular-nums;font-size:13px}
+  input[type=range]{width:100%;accent-color:var(--cyan);height:22px;cursor:pointer}
+  .hint{color:var(--dim);font-size:11.5px;margin:-2px 0 0}
+  .btns{display:flex;flex-wrap:wrap;gap:6px}
+  button{background:var(--panel2);color:var(--txt);border:1px solid var(--line);
+    border-radius:6px;padding:7px 10px;font-size:12.5px;cursor:pointer;font-family:inherit}
+  button:hover{background:#26374d;border-color:#3a5170}
+  button.on{background:#1d4a63;border-color:var(--cyan);color:#bfe9f5}
+  .gauges{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+  .g{background:var(--panel2);border-radius:7px;padding:9px 10px}
+  .g .k{color:var(--dim);font-size:11px;margin-bottom:2px}
+  .g .v{font-size:19px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.4px}
+  .g .u{font-size:11px;color:var(--dim);margin-left:3px;font-weight:400}
+  .bar{height:5px;background:#0b1119;border-radius:3px;margin-top:6px;overflow:hidden}
+  .bar>i{display:block;height:100%;border-radius:3px;transition:width .1s linear}
+  .exp{background:#0b1119;border-left:3px solid var(--cyan);border-radius:6px;padding:10px 12px;margin-top:12px}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;font-variant-numeric:tabular-nums}
+  td{padding:3px 2px;text-align:right;border-bottom:1px solid #1b2839}
+  td:first-child{text-align:left;color:var(--dim);font-weight:400}
+  tr:last-child td{border-bottom:none}
+  .splitbar{display:flex;height:20px;border-radius:5px;overflow:hidden;margin-top:6px;font-size:10.5px}
+  .splitbar div{display:flex;align-items:center;justify-content:center;color:#06111c;font-weight:700;overflow:hidden;white-space:nowrap}
+  .note{color:var(--dim);font-size:11.5px;line-height:1.65;margin:8px 0 0}
+  .note b{color:#cfe0f0}
+  .note code{background:#0b1119;padding:1px 4px;border-radius:3px;color:#a9c6de;font-size:11px}
+  details{margin-top:2px}
+  summary{cursor:pointer;color:var(--blue);font-size:12.5px;outline:none}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+  .small{font-size:11.5px;color:var(--dim)}
+  #regimeTag{margin-left:auto;background:#0b1119;border:1px solid var(--line);
+    border-radius:20px;padding:3px 11px;font-size:12px;color:var(--cyan)}
+  .tbar{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:11px;color:var(--dim)}
+  .tbar i{flex:1;height:8px;border-radius:4px;
+    background:linear-gradient(90deg,#4da3ff,#7fd0ff,#d7eeff,#ffebaa,#ffd24a,#ff9a2f,#ff5a2f,#ff3c6e)}
+</style>
+</head>
+<body>
+<header>
+  <h1>터보팬 엔진 작동 시뮬레이션</h1>
+  <p>공기가 들어와 압축되고 → 연료가 타면서 터빈을 돌리고 → 그 터빈이 다시 압축기와 팬을 돌리는 구조를 눈으로 확인합니다.</p>
+</header>
+
+<div class="wrap">
+  <div>
+    <div class="card">
+      <div class="row">
+        <button id="playBtn" class="on">⏸ 흐름 일시정지</button>
+        <button id="traceBtn" class="on">공기 흐름</button>
+        <button id="cutBtn" class="on">단면</button>
+        <span id="regimeTag">—</span>
+      </div>
+      <canvas id="cv"></canvas>
+      <div class="tbar"><span>−60 °C</span><i></i><span>900 °C</span></div>
+      <div class="exp" id="explain"></div>
+    </div>
+
+    <div class="card" style="margin-top:14px">
+      <h2>공기는 어떻게 나뉘는가</h2>
+      <div class="splitbar">
+        <div id="sbB" style="background:linear-gradient(90deg,#9fdcff,#4da3ff)">우회 — 연료 안 탐</div>
+        <div id="sbC" style="background:linear-gradient(90deg,#ffd24a,#ff7a2f)">코어</div>
+      </div>
+      <p class="note" style="margin-bottom:0">
+        팬 뒤로 지나가는 공기의 약 <b id="bypassPct">86</b>%는 <b>연료를 태우지 않고</b> 그대로 뒤로 밀어내면서
+        추력을 만듭니다. 나머지 <b id="corePct">14</b>%만 코어 안으로 들어가 압축되고, 연료를 태워
+        <b>500~900 °C</b>의 배기가 됩니다. 이 <b>우회비(bypass ratio)</b>가 클수록 조용하고 연료 효율이 좋습니다.
+        이 모델의 설계 우회비는 <code>6.0</code>입니다.
+      </p>
+    </div>
+
+    <div class="card" style="margin-top:14px">
+      <h2>수업에서 관찰하기 — 슬라이더를 움직이며 볼 것</h2>
+      <table style="font-size:12.5px">
+        <tr><td style="width:34%">스로틀 0 → 100 %</td>
+            <td style="text-align:left;line-height:1.55">
+              공기 유량은 <b>N1에 비례</b>하지만 추력은 <b>N1의 제곱</b>에 가깝게 늘어납니다.
+              연료 소모량은 N1에 비례 → <b>스스로를 몰아붙일수록 효율이 떨어집니다.</b></td></tr>
+        <tr><td>고도 0 → 11 000 m (같은 N1)</td>
+            <td style="text-align:left;line-height:1.55">
+              공기가 얇아지므로 통과 유량과 압력 상승 모두 줄어 <b>추력이 크게 떨어집니다.</b>
+              연료는 아낄 수 있지만 얻는 추력도 줄어듭니다.</td></tr>
+        <tr><td>속도 0 → 300 m/s (같은 고도·N1)</td>
+            <td style="text-align:left;line-height:1.55">
+              빠른 비행일수록 <b>램 효과</b>로 같은 압력 상승을 더 적은 공기로 얻어
+              추력과 연료 효율이 함께 올라갑니다. 다만 너무 빠르면 팬 앞단에 shock 이 생겨效率이 꺾입니다.</td></tr>
+        <tr><td>대기·정지 ↔ 저속 접근</td>
+            <td style="text-align:left;line-height:1.55">
+              아이들 부근은 <b>연료 효율(TSFC)이 가장 나쁜 구간</b>입니다.
+              출력 자체가 작아서 어쩔 수 없는 영역이라는 점을 짚어 주세요.</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <h2>조작</h2>
+      <div class="ctl">
+        <label for="thr"><b>스로틀 (N1)</b><span id="thrV">88 %</span></label>
+        <input type="range" id="thr" min="0" max="105" step="1" value="88">
+        <p class="hint">연료 분사량 → 터빈 회전수 → 압축기와 팬을 돌림</p>
+      </div>
+      <div class="ctl">
+        <label for="alt"><b>고도</b><span id="altV">10 500 m</span></label>
+        <input type="range" id="alt" min="0" max="13000" step="50" value="10500">
+        <p class="hint">높을수록 공기가 얇아짐 → 압력·밀도 감소</p>
+      </div>
+      <div class="ctl">
+        <label for="spd"><b>비행 속도</b><span id="spdV">240 m/s</span></label>
+        <input type="range" id="spd" min="0" max="320" step="2" value="240">
+        <p class="hint">빠를수록 엔진 앞에 공기가 밀려 들어옴 → 램 효과</p>
+      </div>
+      <div class="btns">
+        <button data-p="idle">대기·정지</button>
+        <button data-p="taxi">지상 활주</button>
+        <button data-p="takeoff">이륙 가속</button>
+        <button data-p="climb">상승</button>
+        <button data-p="cruise">순항</button>
+        <button data-p="hi">고고도 정지</button>
+        <button data-p="app">저속 접근</button>
+        <button data-p="sup">초음속 돌파</button>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:14px">
+      <h2>계기</h2>
+      <div class="gauges">
+        <div class="g"><div class="k">팬 회전수 N1</div>
+          <div class="v" id="n1v">—</div><div class="bar"><i id="n1b" style="background:var(--cyan)"></i></div></div>
+        <div class="g"><div class="k">코어 회전수 N2</div>
+          <div class="v" id="n2v">—</div><div class="bar"><i id="n2b" style="background:var(--blue)"></i></div></div>
+        <div class="g"><div class="k">추력</div>
+          <div class="v" id="tv">—</div><div class="bar"><i id="tb" style="background:var(--green)"></i></div></div>
+        <div class="g"><div class="k">연료 소모량</div>
+          <div class="v" id="fv">—</div><div class="bar"><i id="fb" style="background:var(--yellow)"></i></div></div>
+        <div class="g"><div class="k">배기 온도 EGT</div>
+          <div class="v" id="ev">—</div><div class="bar"><i id="eb" style="background:var(--hot)"></i></div></div>
+        <div class="g"><div class="k">연료 효율 TSFC</div>
+          <div class="v" id="sv">—</div><div class="bar"><i id="sb2" style="background:#b98cff"></i></div></div>
+        <div class="g"><div class="k">팬 통과 공기량</div>
+          <div class="v" id="av">—</div><div class="bar"><i id="ab" style="background:#7fd0ff"></i></div></div>
+        <div class="g"><div class="k">마하 수</div>
+          <div class="v" id="mv">—</div><div class="bar"><i id="mb" style="background:#8fa3ba"></i></div></div>
+      </div>
+      <table style="margin-top:10px">
+        <tr><td>대기 압력</td><td id="pv">—</td></tr>
+        <tr><td>대기 밀도</td><td id="rv">—</td></tr>
+        <tr><td>바깥 기온</td><td id="tv2">—</td></tr>
+        <tr><td>팬 날개끝 마하</td><td id="mfv">—</td></tr>
+        <tr><td>1시간 동안 쓰는 연료</td><td id="h1v">—</td></tr>
+      </table>
+      <p class="small" style="margin:8px 0 0">
+        TSFC(연료소모율) = <b>추력 1 kN을 1시간 동안 유지하는 데 필요한 연료</b>. 작을수록 좋은 엔진입니다.
+      </p>
+    </div>
+
+    <div class="card" style="margin-top:14px">
+      <h2>어디서 가장 연료가 적게 들까</h2>
+      <p class="small" style="margin:0 0 6px">
+        같은 추력 <b>60 kN</b>을 낼 때의 TSFC 지도. 진한 녹색일수록 효율이 좋습니다. ⊕ = 지금 위치, ★ = 가장 좋은 곳.<br>회색 = 이 엔진으로는 N1 100 %를 넘어야 해서 60 kN을 낼 수 없는 조합.
+      </p>
+      <canvas id="map"></canvas>
+      <div class="btns" style="margin-top:8px">
+        <button id="optBtn">최적점 찾아보기</button>
+        <button id="hereBtn">지금 고도·속도에서 60 kN 맞추기</button>
+      </div>
+      <p class="note" id="optMsg"></p>
+    </div>
+
+    <div class="card" style="margin-top:14px">
+      <h2>이 계산이 어디까지 맞는지</h2>
+      <details open>
+        <summary>모델의 한계 — 수업 전에 꼭 읽어주세요</summary>
+        <p class="note">
+          이 페이지는 <b>개념 설명용 축약 모델</b>입니다. 특정 기종의 실적이 아니라,
+          서로 모순되지 않게 맞춘 <b>가상의 대형 터보팬</b>의 계산값을 보여 줍니다.
+          실제 터코팬 성능 프로그램과 계산값은 다릅니다.
+        </p>
+        <p class="note">
+          <b>반영한 것</b> — 대기 상태 변화 · 램 압력 회복 · 팬 압력 상승과 유량 · 터빈이 가지는 일 ·
+          노즐까지 남는 순 압력 상승 · 흡입구 손실 · 팬 날개끝이 초음속에 가까워질 때의 효율 저하 ·
+          코어 비행 연료계수.
+        </p>
+        <p class="note">
+          <b>반영하지 않은 것</b> — 압축기 단별 온도 분포 · 터빈 단계 수와 내부 유량 ·
+          서지(surge)와 오버스루 · 냉각 블로우 · 노즐 팽창 손실 · 카르만 헤드 휠 · 기체 항력 변화.
+        </p>
+        <p class="note">
+          그래도 <b>방향과 인과관계는 실제와 같습니다.</b> 이 페이지의 목적은 그것입니다.
+        </p>
+      </details>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ==========================================================================
+   1. 물리 모델
+   --------------------------------------------------------------------------
+     추력 = 면적 × 압력차    (Δp = 정체압 × 압력 상승률)
+     유량 = 밀도 × 면적 × 팬입구 축속도
+     연료 = 코어 유량 × 비행 연료계수
+   압력 상승률은 N1² 에 비례하고, 램 효과로 커지며, 팬 날개끝이
+   초음속에 가까워지면 떨어진다.
+   ========================================================================== */
+const P = {
+  A_f: 4.45,        // 팬 유입 면적 m² (팬 지름 2.38 m)
+  BPR: 6.0,         // 설계 우회비
+  c_face: 130,      // N1=100%, 정지 상태 팬입구 축속도 m/s
+  fr: 0.40,         // 팬 최대 압력 상승률
+  cr: 0.73,         // 코어: 노즐까지 남는 순 압력 상승률
+  kc: 0.68,         // 코어입구 마하 = kc × 팬입구 마하
+  mGf: 0.50, wGf: 0.68,   // 팬 효율 저하 곡선 (중심, 폭)
+  kCap: 0.20,       // 고속에서 흡입구가 잡아들이는 유속 비율
+  kRam: 1.30,       // 램 압력 회복 보너스 세기
+  cd: 0.03,         // 흡입구·나셀 압력 손실
+  cs0: 0.0064, csK: 0.42, csB: 0.95, csI: 0.0026   // 코어 비행 연료계수
+};
+const GAS_R = 287.05, GAM = 1.4, TAU = Math.PI*2;
+
+const G0 = 9.80665;
+function isa(h){
+  let T, p;
+  if(h <= 11000){                       // 표준 대기의 대류층
+    T = 288.15 - 0.0065*h;
+    p = 101325*Math.pow(T/288.15, 5.2558);
+  } else {                               // 등온층 (11~20 km)
+    T = 216.65;
+    p = 22632*Math.exp(-G0*(h-11000)/(GAS_R*T));
+  }
+  return { T, p, rho: p/(GAS_R*T), a: Math.sqrt(GAM*GAS_R*T) };
+}
+// 날개끝 마하가 너무 높으면(초음속) 효율이 떨어진다
+const bell = (x,m,w) => 1/(1 + Math.pow((x-m)/w, 4));
+
+function solve(n1Pct, alt, vel){
+  const at = isa(alt), n = n1Pct/100, M0 = vel/at.a;
+  const q   = 1 + 0.2*M0*M0;                  // 정체 온도/압력 계수
+  const pt  = at.p*Math.pow(q,3.5);           // 램 회복된 팬입구 정체압
+  const at_ = at.a*Math.sqrt(q);
+  const ram = 1 + P.kRam*(Math.pow(q,2.5)-1); // 램으로 늘어나는 압력 상승 여유
+  const Mf  = (vel + P.c_face*n)/at_;         // 팬 날개끝 마하(근사)
+  const Vf  = P.c_face*n + vel*P.kCap;        // 팬을 통과하는 축속도
+  const mf  = at.rho*P.A_f*Vf;                // 팬(우회) 유량
+  const mc  = mf/P.BPR;                       // 코어 유량
+
+  const fpr = P.fr*n*n*ram*bell(Mf, P.mGf, P.wGf);
+  const cpr = P.cr*n*n*ram*bell(P.kc*Mf, P.mGf*0.7, P.wGf);
+  const Tfan  = P.A_f*pt*fpr;
+  const Tcore = (P.A_f/P.BPR)*pt*cpr;
+  const drag  = mf*vel*P.cd;
+  const thrust= Tfan + Tcore - drag;
+
+  // 코어 비행 연료계수: N1 95% 부근이 가장 좋고, 아이들·최대출력은 나쁘다
+  const cs   = P.cs0*(1 + P.csK*Math.pow((n-P.csB)/P.csB,2)) + P.csI/(n+0.08);
+  const fuel = mc*n*cs;                       // kg/s
+  const rr   = at.rho/1.225, nn = Math.max(n,0);
+  const teg  = nn < 0.01 ? at.T - 273.15
+             : 604 - 89.5*Math.pow(nn,0.373) + 386*Math.pow(nn,4)
+               + 120*(1-rr)*(1.2-Math.min(n,1.2));
+
+  return {
+    n1:n1Pct, n2:20+0.81*n1Pct, thrust, Tfan, Tcore, drag,
+    mf, mc, mt:mf+mc, fuel, M0, Mf, Vf, fpr:1+fpr, cpr:1+cpr, ram,
+    tsfc: thrust>1500 ? fuel*3.6e6/thrust : NaN,
+    teg, rho:at.rho, p:at.p, T:at.T
+  };
+}
+function n1ForThrust(target, alt, vel){        // 목표 추력에 필요한 N1 (이분 탐색)
+  let lo = 0, hi = 112;
+  for(let i=0;i<46;i++){ const m=(lo+hi)/2; if(solve(m,alt,vel).thrust<target) lo=m; else hi=m; }
+  return (lo+hi)/2;
+}
+const machToVel = (m, alt) => m*Math.sqrt(GAM*GAS_R*(288.15-0.0065*Math.min(alt,11000)));
+
+/* ==========================================================================
+   2. 상태
+   ========================================================================== */
+const PRESETS = {
+  idle:    {t:2,   a:0,     v:0,   label:'대기·정지'},
+  taxi:    {t:26,  a:0,     v:12,  label:'지상 활주'},
+  takeoff: {t:100, a:0,     v:60,  label:'이륙 가속'},
+  climb:   {t:100, a:2400,  v:130, label:'상승'},
+  cruise:  {t:88,  a:10500, v:240, label:'순항'},
+  hi:      {t:100, a:11000, v:0,   label:'고고도 정지'},
+  app:     {t:20,  a:300,   v:140, label:'저속 접근'},
+  sup:     {t:100, a:11000, v:300, label:'초음속 돌파'}
+};
+const S = { t:88, a:10500, v:240, playing:true, flow:true, cut:true };
+let R = solve(S.t, S.a, S.v);
+
+/* ==========================================================================
+   3. 단면도 좌표 (가상 좌표계 1000 × 540, 중심선 y = 270)
+   ========================================================================== */
+const VW = 1000, VH = 540;
+const AX = 270, TH = 13;
+const LIP_X = 40, LIP_R = 108;                 // 입구 앞끝
+const NAC_OUT = [[58,146],[100,140],[190,122],[430,115],[570,124],[660,150],[712,168]];
+const DUCT_IN = [[58,176],[120,170],[210,156],[250,145]];        // 흡입구 안쪽(목)
+const COWL    = [[300,192],[450,190],[600,192],[706,200],[748,210]];
+const CORE_O  = [[300,208],[450,204],[620,205],[730,209],[810,220],[880,232],[905,240]];
+const FAN_X = 300, FAN_TIP = 138, HUB = 36, TE_X = 712, CHEV_X = 748;
+
+function at(pts, x){
+  if(x <= pts[0][0]) return pts[0][1];
+  for(let i=1;i<pts.length;i++){
+    if(x <= pts[i][0]){
+      const [x0,y0]=pts[i-1],[x1,y1]=pts[i];
+      return y0 + (y1-y0)*((x-x0)/(x1-x0));
+    }
+  }
+  return pts[pts.length-1][1];
+}
+const nacR  = x => AX - at(NAC_OUT, x);                        // 나셀 외벽
+// 흡입구 목 → 팬 케이스 안쪽으로 부드럽게 이어짐
+const thrR  = x => {
+  if(x >= FAN_X) return nacR(x) - TH;                 // 팬 케이스 안쪽
+  if(x <= 250)   return AX - at(DUCT_IN, x);           // 흡입구 목
+  const base = AX - at(DUCT_IN, 250), t = (x-250)/(FAN_X-250);
+  return base + ((nacR(x)-TH) - base)*t;
+};
+const cowlR = x => AX - (x < FAN_X ? at(COWL,FAN_X) : at(COWL,x));
+const coreR = x => AX - at(CORE_O, x);
+const caseR = x => x < CHEV_X ? AX - at(COWL,x) : (AX - at(CORE_O,x)) + 13;
+
+// 우회 유체 한 점의 반지름 범위
+const BX0 = (cowlR(TE_X) + thrR(TE_X))/2;
+const BH0 = (thrR(TE_X) - cowlR(TE_X))/2;
+function bypassR(x){
+  if(x < LIP_X+6) return [0,0];
+  if(x < FAN_X)  return [thrR(x), nacR(x)-TH];
+  if(x < TE_X)   return [cowlR(x), nacR(x)-TH];
+  const d = x - TE_X;
+  return [BX0-BH0-d*0.20, BX0+BH0+d*0.38];
+}
+// 코어 유체 한 점의 반지름 범위
+const CORE_KEY = [[-140,4,46],[290,4,52],[300,22,60],[420,20,30],[500,20,30],
+                  [560,22,42],[620,24,44],[740,24,42],[830,12,20],[1040,4,62]];
+function coreSpan(x){
+  const K = CORE_KEY;
+  if(x<=K[0][0]) return [K[0][1],K[0][2]];
+  for(let i=1;i<K.length;i++){
+    if(x<=K[i][0]){
+      const t=(x-K[i-1][0])/(K[i][0]-K[i-1][0]);
+      return [K[i-1][1]+(K[i][1]-K[i-1][1])*t, K[i-1][2]+(K[i][2]-K[i-1][2])*t];
+    }
+  }
+  return [K[K.length-1][1],K[K.length-1][2]];
+}
+function tempColor(T){
+  const s = [[230,[61,156,255]],[270,[92,184,255]],[300,[143,208,255]],[330,[184,226,255]],
+             [365,[223,242,255]],[450,[255,233,168]],[600,[255,201,74]],[800,[255,138,43]],
+             [1050,[255,74,42]],[1300,[255,42,94]]];
+  if(T<=s[0][0]) return s[0][1];
+  for(let i=1;i<s.length;i++){
+    if(T<=s[i][0]){
+      const t=(T-s[i-1][0])/(s[i][0]-s[i-1][0]), a=s[i-1][1], b=s[i][1];
+      return [a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t];
+    }
+  }
+  return s[s.length-1][1];
+}
+const rgba = (c,a) => `rgba(${c[0]|0},${c[1]|0},${c[2]|0},${a})`;
+
+function bypassT(x){ return x < FAN_X ? R.T : R.T*(1+0.16*Math.min(R.n1/100,1.1)); }
+function coreT(x){
+  const t0 = R.T, w = Math.min(R.n1/100,1.1);
+  if(x < FAN_X) return t0;
+  if(x < 500) return t0*(1.16 + 1.55*w);
+  if(x < 620) return R.teg + 273;
+  if(x < 760) return (R.teg+273)*0.66;
+  return (R.teg+273)*0.58;
+}
+function bypassSpd(x){
+  const b = 45 + 430*Math.min(R.n1/100,1.1);
+  if(x < FAN_X) return b*0.80;
+  if(x < TE_X)  return b*1.14;
+  return b*1.14*Math.exp(-(x-TE_X)/300);
+}
+function coreSpd(x){
+  const b = 45 + 430*Math.min(R.n1/100,1.1);
+  if(x < FAN_X) return b*0.64;
+  if(x < 500) return b*0.82;
+  if(x < 620) return b*0.95;
+  if(x < 880) return b*1.22;
+  return b*1.22*Math.exp(-(x-880)/260);
+}
+
+/* ==========================================================================
+   4. 입자
+   ========================================================================== */
+const NB = 200, NC = 130;
+const by = new Float32Array(NB), bo = new Float32Array(NB);
+const cy = new Float32Array(NC), co = new Float32Array(NC);
+const rnd = a => a[Math.floor(Math.random()*a.length)];
+for(let i=0;i<NB;i++){ by[i]=rnd([-140,0,300,700,1000,1020]); bo[i]=Math.random(); }
+for(let i=0;i<NC;i++){ cy[i]=rnd([-140,0,300,700,1000,1020]); co[i]=Math.random(); }
+let fanAng = 0, turbAng = 0;
+
+function stepParticles(dt){
+  if(!S.playing) return;
+  for(let i=0;i<NB;i++){
+    by[i] += bypassSpd(by[i])*dt*(0.55+0.45*bo[i]);
+    if(by[i] > 1005){ by[i] = -140 - Math.random()*60; bo[i] = Math.random(); }
+  }
+  for(let i=0;i<NC;i++){
+    cy[i] += coreSpd(cy[i])*dt*(0.55+0.45*co[i]);
+    if(cy[i] > 1005){ cy[i] = -140 - Math.random()*60; co[i] = Math.random(); }
+  }
+  const w = Math.min(R.n1/100, 1.15);
+  fanAng  += dt*(0.6 + 8.4*w);
+  turbAng += dt*(0.5 + 6.8*w);
+}
+
+/* ==========================================================================
+   5. 캔버스
+   ========================================================================== */
+const cv = document.getElementById('cv');
+let g = null, SC = 1;
+function fitCanvas(c, vw, vh){
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.max(300, c.clientWidth || vw);
+  c.style.height = Math.round(w*vh/vw)+'px';
+  c.width  = Math.round(w*dpr);
+  c.height = Math.round(w*vh/vw*dpr);
+  const ctx = c.getContext('2d');
+  ctx.setTransform(dpr*w/vw, 0, 0, dpr*w/vw, 0, 0);
+  return ctx;
+}
+const FONT = ' -apple-system,"Apple SD Gothic Neo",sans-serif';
+const F = k => (13.5*SC*k).toFixed(1)+'px'+FONT;
+
+function draw(){
+  g.clearRect(0,0,VW,VH);
+  const bg = g.createLinearGradient(0,0,0,VH);
+  bg.addColorStop(0,'#0a121d'); bg.addColorStop(0.5,'#0d1725'); bg.addColorStop(1,'#0a121d');
+  g.fillStyle = bg; g.fillRect(0,0,VW,VH);
+  if(S.cut)  drawStructure();
+  if(S.flow) drawParticles();
+  drawLabels();
+}
+
+function drawStructure(){
+  const MET = '#1f2d3f', MET2 = '#283a51', EDGE = 'rgba(150,190,225,.32)';
+  const ry = (r, mir) => mir ? AX + r : AX - r;          // 반지름 -> y
+  const my = (y, mir) => mir ? 2*AX - y : y;             // 이미 y 값 -> 대칭
+  const metal = () => {
+    const lg = g.createLinearGradient(0, 0, 0, VH);
+    lg.addColorStop(0, MET2); lg.addColorStop(0.44, MET); lg.addColorStop(1, MET2);
+    return lg;
+  };
+  // ---- 나셀 (윗면·아랫면) ----
+  for(const mir of [false, true]){
+    g.beginPath();
+    g.moveTo(LIP_X, ry(LIP_R, mir));
+    g.quadraticCurveTo(LIP_X+7, ry(117, mir), 58, ry(124, mir));      // 라운드 립
+    for(let x=62; x<=TE_X; x+=4) g.lineTo(x, ry(nacR(x), mir));
+    g.lineTo(TE_X, ry(thrR(TE_X), mir));
+    for(let x=TE_X-4; x>=58; x-=4) g.lineTo(x, ry(thrR(x), mir));
+    g.quadraticCurveTo(LIP_X+7, ry(100, mir), LIP_X, ry(LIP_R, mir));
+    g.closePath();
+    g.fillStyle = metal(); g.fill();
+    g.strokeStyle = EDGE; g.lineWidth = 1.2*SC; g.stroke();
+  }
+  // ---- 코어 카울 + 코어 외벽 ----
+  for(const mir of [false, true]){
+    g.beginPath();
+    for(let x=296; x<=900; x+=4) g.lineTo(x, ry(caseR(x), mir));
+    for(let x=900; x>=296; x-=4) g.lineTo(x, ry(coreR(x), mir));
+    g.closePath();
+    g.fillStyle = metal(); g.fill();
+    g.strokeStyle = EDGE; g.lineWidth = 1.2*SC; g.stroke();
+  }
+  // ---- 셰브론 (우회 노즐) ----
+  for(const mir of [false, true]){
+    g.beginPath();
+    g.moveTo(TE_X, ry(nacR(TE_X), mir));
+    g.lineTo(CHEV_X+16, ry(nacR(TE_X)+9, mir));
+    g.lineTo(CHEV_X+16, ry(caseR(CHEV_X)-5, mir));
+    g.lineTo(CHEV_X-16, ry(caseR(CHEV_X), mir));
+    g.closePath();
+    g.fillStyle = MET2; g.fill(); g.strokeStyle = EDGE; g.lineWidth = 1.2*SC; g.stroke();
+  }
+  // ---- 스플리터 ----
+  g.fillStyle = '#33475f';
+  g.beginPath();
+  g.moveTo(286, ry(cowlR(FAN_X), false)); g.lineTo(FAN_X, ry(coreR(FAN_X), false));
+  g.lineTo(FAN_X, ry(coreR(FAN_X), true));  g.lineTo(286, ry(cowlR(FAN_X), true));
+  g.closePath(); g.fill();
+  // ---- 코어 안쪽 어둡게 ----
+  g.fillStyle = 'rgba(6,11,17,.78)';
+  g.beginPath();
+  for(let x=300; x<=902; x+=4) g.lineTo(x, ry(coreR(x)-2, false));
+  for(let x=902; x>=300; x-=4) g.lineTo(x, ry(coreR(x)-2, true));
+  g.closePath(); g.fill();
+  // ---- 샤프트: 터빈이 만들어낸 회전력이 압축기와 팬으로 전달된다 ----
+  g.strokeStyle = 'rgba(255,186,96,.55)'; g.lineWidth = 2.4*SC;
+  g.setLineDash([9*SC,5*SC]);
+  g.beginPath(); g.moveTo(700,AX); g.lineTo(322,AX); g.stroke();
+  g.setLineDash([]);
+  g.fillStyle = 'rgba(255,186,96,.8)';
+  g.beginPath();
+  g.moveTo(300,AX); g.lineTo(320,AX-7*SC); g.lineTo(320,AX+7*SC);
+  g.closePath(); g.fill();
+  g.strokeStyle = 'rgba(255,186,96,.35)'; g.lineWidth = 1.4*SC;
+  g.beginPath(); g.moveTo(322,AX); g.lineTo(500,AX); g.stroke();
+
+  // ---- 스피너 ----
+  g.fillStyle = '#3a5070';
+  g.beginPath();
+  g.moveTo(200, AX);
+  g.bezierCurveTo(238, AX-HUB*0.55, 268, AX-HUB, FAN_X, AX-HUB);
+  g.lineTo(FAN_X, AX+HUB);
+  g.bezierCurveTo(268, AX+HUB, 238, AX+HUB*0.55, 200, AX);
+  g.closePath(); g.fill();
+  // ---- 팬 날개 ----
+  const NB_ = 18;
+  for(const mir of [false,true]){
+    g.beginPath();
+    for(let k=0;k<NB_;k++){
+      const a = fanAng + k*TAU/NB_;
+      let first = true;
+      for(let t=0;t<=1.0001;t+=0.1){
+        const r = HUB+4 + (FAN_TIP-HUB-4)*t, aa = a + 0.36*(1-t);
+        const px = FAN_X + 15*t, py = AX - r*Math.cos(aa)*(mir?-1:1);
+        first ? (g.moveTo(px,py), first=false) : g.lineTo(px,py);
+      }
+      for(let t=1;t>=-0.0001;t-=0.1){
+        const r = HUB+4 + (FAN_TIP-HUB-4)*t, aa = a + 0.36*(1-t) + 0.30;
+        g.lineTo(FAN_X + 15*t + 8, AX - r*Math.cos(aa)*(mir?-1:1));
+      }
+      g.closePath();
+    }
+    g.fillStyle = mir ? 'rgba(112,152,196,.40)' : 'rgba(152,196,238,.60)';
+    g.fill();
+  }
+  g.strokeStyle = 'rgba(190,225,255,.45)'; g.lineWidth = 1.4*SC;
+  for(const mir of [false,true]){
+    g.beginPath(); g.ellipse(FAN_X+7, AX, 9*SC, (FAN_TIP-2)*SC, 0, 0, TAU); g.stroke();
+  }
+  g.fillStyle = '#8fd0ff';
+  g.beginPath(); g.arc(FAN_X, AX, 7*SC, 0, TAU); g.fill();
+  g.strokeStyle = 'rgba(143,208,255,.85)'; g.lineWidth = 2*SC;
+  g.beginPath(); g.moveTo(FAN_X,AX);
+  g.lineTo(FAN_X+Math.cos(fanAng)*13, AX+Math.sin(fanAng)*13); g.stroke();
+  // ---- 압축기 블레이드 ----
+  g.lineWidth = 3.4*SC; g.strokeStyle = 'rgba(170,208,240,.72)';
+  for(let s=0;s<7;s++){
+    const x = 326+s*25, r = 58-s*5.4;
+    for(const mir of [false,true]){
+      g.beginPath(); g.moveTo(x, AX-r*(mir?-1:1)); g.lineTo(x+9, AX-(r-9)*(mir?-1:1)); g.stroke();
+    }
+  }
+  // ---- 터빈 블레이드 ----
+  g.lineWidth = 3.6*SC; g.strokeStyle = 'rgba(255,200,132,.85)';
+  for(let s=0;s<5;s++){
+    const x = 636+s*22, r = 42-s*1.8;
+    for(const mir of [false,true]){
+      g.beginPath(); g.moveTo(x, AX-r*(mir?-1:1)); g.lineTo(x+8, AX-(r-8)*(mir?-1:1)); g.stroke();
+    }
+  }
+  g.fillStyle = '#ffb257';
+  g.beginPath(); g.arc(682, AX, 5*SC, 0, TAU); g.fill();
+  g.strokeStyle = 'rgba(255,178,87,.8)'; g.lineWidth = 2*SC;
+  g.beginPath(); g.moveTo(682,AX);
+  g.lineTo(682+Math.cos(turbAng)*12, AX+Math.sin(turbAng)*12); g.stroke();
+  // ---- 연소실 챔버 벽 ----
+  g.strokeStyle = 'rgba(255,180,110,.35)'; g.lineWidth = 1.6*SC;
+  for(const mir of [false,true]){
+    for(const rr of [22, 48]){
+      g.beginPath();
+      for(let x=500; x<=622; x+=6){
+        const bulge = 1 + 0.10*Math.sin(Math.PI*(x-500)/122);
+        g.lineTo(x, AX - rr*bulge*(mir?-1:1));
+      }
+      g.stroke();
+    }
+  }
+  // ---- 연료 분사 표시 ----
+  if(R.fuel > 0.002){
+    const k = Math.min(R.fuel/1.3, 1);
+    g.strokeStyle = `rgba(120,255,170,${0.45+0.4*k})`; g.lineWidth = 1.6*SC;
+    g.setLineDash([4*SC,3*SC]);
+    g.beginPath();
+    g.moveTo(500, AX-30); g.lineTo(524, AX-31);
+    g.moveTo(500, AX+30); g.lineTo(524, AX+31);
+    g.stroke(); g.setLineDash([]);
+  }
+  // ---- 연소실 불꽃 ----
+  const fl = Math.min(R.n1/100, 1.1);
+  if(fl > 0.03){
+    const flick = 0.76 + 0.24*Math.sin(performance.now()/85);
+    for(const mir of [false,true]){
+      const cyy = AX - 32*(mir?-1:1);
+      g.save();
+      g.beginPath(); g.ellipse(558, cyy, 62*SC, 16*SC, 0, 0, TAU); g.clip();
+      const gr = g.createRadialGradient(556, cyy, 1, 556, cyy, 46*SC);
+      gr.addColorStop(0,   `rgba(255,255,248,${1.00*flick*fl})`);
+      gr.addColorStop(0.34,`rgba(255,226,140,${1.00*flick*fl})`);
+      gr.addColorStop(0.70,`rgba(255,132,36,${0.92*flick*fl})`);
+      gr.addColorStop(1,   'rgba(255,60,16,0)');
+      g.fillStyle = gr; g.fillRect(488, cyy-60*SC, 150, 120*SC);
+      g.restore();
+    }
+  }
+  // ---- 팬 앞단 shock ----
+  if(R.Mf > 0.92){
+    const a = Math.min(1, (R.Mf-0.92)/0.35);
+    g.strokeStyle = `rgba(130,205,255,${0.55*a})`; g.lineWidth = 2.2*SC;
+    for(const mir of [false,true]){
+      g.beginPath();
+      g.moveTo(FAN_X-8, AX-(FAN_TIP-4)*(mir?-1:1));
+      g.lineTo(FAN_X-18, AX-(FAN_TIP-58)*(mir?-1:1));
+      g.stroke();
+    }
+  }
+  // ---- 추력 화살표 ----
+  const tk = Math.max(0, Math.min(R.thrust/280e3, 1));
+  if(tk > 0.004){
+    const X0 = 470, Y0 = 52, len = 20 + 300*tk;
+    g.strokeStyle = 'rgba(93,219,138,.30)'; g.lineWidth = 7*SC; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(X0, Y0); g.lineTo(X0+320, Y0); g.stroke();
+    g.strokeStyle = '#5ddb8a'; g.lineWidth = 3.4*SC;
+    g.beginPath(); g.moveTo(X0, Y0); g.lineTo(X0+len, Y0); g.stroke();
+    g.beginPath();
+    g.moveTo(X0+len+15, Y0); g.lineTo(X0+len, Y0-8); g.lineTo(X0+len, Y0+8);
+    g.closePath(); g.fillStyle = '#5ddb8a'; g.fill();
+    g.fillStyle = '#5ddb8a'; g.font = '600 '+F(1.02); g.textAlign = 'left'; g.textBaseline = 'bottom';
+    g.fillText('추력 '+(R.thrust/1000).toFixed(0)+' kN', X0, Y0-9);
+  }
+}
+
+const LBL = [[96,442,'흡입구'],[300,470,'팬'],[430,98,'우회덕트 (bypass)'],
+             [410,356,'압축기'],[560,356,'연소실'],[682,356,'터빈'],[846,336,'코어 노즐']];
+const NOTE = [[512,158,'터빈이 회전력을 만들어','압축기와 팬을 돌린다','#ffba60']];
+function drawLabels(){
+  if(!S.cut){
+    if(R.n1 < 3){
+      g.font = '600 '+F(1.1); g.textAlign='center'; g.textBaseline='middle';
+      g.fillStyle = 'rgba(255,110,110,.95)';
+      g.fillText('엔진 정지 — 팬이 회전하지 않음', 320, 512);
+    }
+    return;
+  }
+  g.font = '600 '+F(1);
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  for(const [x,y,txt] of LBL){
+    const w = g.measureText(txt).width + 14*SC;
+    g.fillStyle = 'rgba(8,13,20,.78)';
+    g.beginPath(); g.roundRect(x-w/2, y-11*SC, w, 22*SC, 5*SC); g.fill();
+    g.fillStyle = '#bcd5ea'; g.fillText(txt, x, y+0.5);
+  }
+  if(R.n1 > 2){
+    g.font = F(0.94);
+    const w = Math.max(g.measureText(NOTE[0][2]).width, g.measureText(NOTE[0][3]).width) + 16*SC;
+    g.fillStyle = 'rgba(8,13,20,.82)';
+    g.beginPath(); g.roundRect(NOTE[0][0]-w/2, NOTE[0][1]-24*SC, w, 40*SC, 6*SC); g.fill();
+    g.fillStyle = NOTE[0][4];
+    g.fillText(NOTE[0][2], NOTE[0][0], NOTE[0][1]-9*SC);
+    g.fillText(NOTE[0][3], NOTE[0][0], NOTE[0][1]+8*SC);
+  }
+  if(R.Mf > 0.98){
+    g.fillStyle = 'rgba(140,210,255,.95)'; g.font = F(1);
+    g.fillText('팬 앞단 shock 발생 — 효율 저하', 320, 512);
+  }
+}
+
+function streak(x, y, sp, col, al, w){
+  const len = 3 + sp*0.014;
+  g.globalAlpha = al;
+  g.strokeStyle = rgba(col,1);
+  g.lineWidth = w; g.lineCap = 'round';
+  g.beginPath(); g.moveTo(x-len, y); g.lineTo(x, y); g.stroke();
+  g.globalAlpha = al*0.42;
+  g.beginPath(); g.moveTo(x-len*1.55, y); g.lineTo(x-len*1.2, y); g.stroke();
+  g.globalAlpha = 1;
+}
+function drawParticles(){
+  const al = 0.22 + 0.78*Math.min(R.n1/100, 1.1);
+  for(let i=0;i<NB;i++){
+    const x = by[i]; if(x < 0) continue;
+    const p = bypassR(x), r0 = p[0], r1 = p[1];
+    if(r1 <= r0) continue;
+    const r = r0 + (r1-r0)*bo[i], y = AX - r;
+    const c = tempColor(bypassT(x)), v = bypassSpd(x);
+    streak(x, y, v, c, al, 3.4*SC);
+    streak(x, 2*AX-y, v, c, al, 3.4*SC);
+  }
+  for(let i=0;i<NC;i++){
+    const x = cy[i]; if(x < 0) continue;
+    const p = coreSpan(x), r0 = p[0], r1 = p[1];
+    if(r1 <= r0) continue;
+    const r = r0 + (r1-r0)*co[i], y = AX - r;
+    const c = tempColor(coreT(x)), v = coreSpd(x);
+    streak(x, y, v, c, al, 3.3*SC);
+    streak(x, 2*AX-y, v, c, al, 3.3*SC);
+  }
+}
+
+/* ==========================================================================
+   6. 계기 · 설명
+   ========================================================================== */
+const $ = id => document.getElementById(id);
+const fmt = (x,d=0) => (isFinite(x)?x:0).toLocaleString('ko-KR',{minimumFractionDigits:d,maximumFractionDigits:d});
+const clamp01 = x => Math.max(0, Math.min(1, x));
+
+function paint(){
+  $('n1v').innerHTML = fmt(R.n1,1)+'<span class="u">%</span>';
+  $('n2v').innerHTML = fmt(R.n2,1)+'<span class="u">%</span>';
+  $('n1b').style.width = (clamp01(R.n1/105)*100)+'%';
+  $('n2b').style.width = (clamp01(R.n2/105)*100)+'%';
+  $('tv').innerHTML  = fmt(Math.max(0,R.thrust)/1000, R.thrust<10000?1:0)+'<span class="u">kN</span>';
+  $('tb').style.width = (clamp01(R.thrust/280e3)*100)+'%';
+  const fh = R.fuel*3600;
+  $('fv').innerHTML  = fmt(fh,0)+'<span class="u">kg/h</span>';
+  $('fb').style.width = (clamp01(R.fuel/1.35)*100)+'%';
+  $('ev').innerHTML  = fmt(R.teg,0)+'<span class="u">°C</span>';
+  $('eb').style.width = (clamp01((R.teg-300)/650)*100)+'%';
+  $('sv').innerHTML  = (isFinite(R.tsfc)?fmt(R.tsfc,1):'—')+'<span class="u">kg/(kN·h)</span>';
+  $('sb2').style.width = (isFinite(R.tsfc)?clamp01(1-(R.tsfc-15)/45)*100:0)+'%';
+  $('av').innerHTML  = fmt(R.mt,0)+'<span class="u">kg/s</span>';
+  $('ab').style.width = (clamp01(R.mt/800)*100)+'%';
+  $('mv').innerHTML  = fmt(R.M0,2);
+  $('mb').style.width = (clamp01(R.M0)*100)+'%';
+  $('pv').textContent  = fmt(R.p/1000,1)+' kPa';
+  $('rv').textContent  = fmt(R.rho,3)+' kg/m³';
+  $('tv2').textContent = fmt(R.T-273.15,0)+' °C';
+  $('mfv').textContent = fmt(R.Mf,2) + (R.Mf>0.92 ? '  ← 초음속(shock)' : '');
+  $('h1v').textContent = fmt(fh,0)+' kg';
+  const bp = P.BPR/(P.BPR+1)*100;
+  $('bypassPct').textContent = Math.round(bp);
+  $('corePct').textContent   = Math.round(100-bp);
+  $('sbB').style.width = bp+'%';
+  $('sbC').style.width = (100-bp)+'%';
+}
+
+function describe(){
+  const n = R.n1;
+  let tag, txt;
+  if(n < 3){
+    tag = '정지';
+    txt = `<b>엔진이 꺼져 있습니다.</b> 팬이 제자리로 밀려 회전만 낭비하고, 압축되는 공기도,
+           타는 연료도, 만들어지는 추력도 없습니다. 노즐을 통과하는 것은 그냥 지나가는 공기뿐입니다.
+           이때 공기를 밀어내느라 <b>항력만</b> 드는데, 그만큼을 빼 준 값이
+           ${R.drag>30?`${fmt(R.drag/1000,1)} kN`:'거의 0'}.`;
+  } else if(R.thrust <= 0.2e3){
+    tag = '추력 부족';
+    txt = `회전은 하지만 <b>지금 비행 조건에서 필요한 추력을 내지 못하고 있습니다.</b>
+           들어오는 공기가 너무 적습니다. 스로틀을 올리거나 비행 속도를 늘려 보세요.`;
+  } else if(n < 25){
+    tag = '유지동력 (아이들)';
+    txt = `터빈이 압축기와 팬을 <b>돌리기만 하면 되는</b> 최소 출력입니다. 연료를 아주 적게 쓰지만
+           그만큼 공기를 통과시키지 못해 <b>연료 효율(TSFC)이 가장 나쁜 구간</b>입니다.
+           지금 TSFC는 ${fmt(R.tsfc,1)} kg/(kN·h). 지상 대기나 접근·착륙에서만 쓰는 상태입니다.`;
+  } else if(R.M0 < 0.35 && S.a > 8000){
+    tag = '고고도 정지 비행';
+    const sea = solve(n, 0, 0).thrust;
+    txt = `바람이 거의 없는데도 <b>높은 고도에서 출력을 유지</b>하고 있습니다.
+           ${fmt(S.a/1000,1)} km 의 공기 밀도는 지상의 <b>${Math.round(R.rho/1.225*100)}%</b>뿐입니다.
+           같은 N1이라도 지상 정지 상태(${fmt(sea/1000,0)} kN)보다
+           추력이 <b>${Math.round(100*(1-R.thrust/sea))}%나 작습니다.</b>
+           고도가 높을수록 연료 소모는 줄지만, 얻는 추력도 줄어듭니다.`;
+  } else if(S.a > 8000 && R.M0 > 0.78){
+    tag = R.M0 > 1 ? '초음속 순항' : '고고도 순항';
+    txt = `빠른 비행이 <b>높은 고도의 약한 공기를 보충</b>해 줍니다.
+           지금 N1 ${fmt(n,0)}% 로 초당 <b>${fmt(R.mf,0)} kg</b>의 공기가 팬을 지나가고,
+           그중 <b>${Math.round(100/(P.BPR+1))}%</b>만 코어에서 연료를 태웁니다.
+           TSFC ${fmt(R.tsfc,1)} — 이 고도에서 저속으로 날면 같은 추력을 더 많은 연료로 내야 합니다.`;
+  } else if(n >= 97){
+    tag = '최대 출력';
+    txt = `연료를 가장 많이 태우는 상태입니다. N1이 커질수록 압축되는 공기량이 늘어나면서 압력 상승이
+           <b>N1의 제곱</b>에 가깝게 커집니다. 그래서 스로틀을 조금 올려도 추력은 크게 늘고,
+           <b>연료 소모량은 N1에 비례</b>해 선형으로 늘어납니다.
+           지금 ${fmt(R.fuel*3600,0)} kg/h 로 ${fmt(R.thrust/1000,0)} kN.`;
+  } else if(n >= 65){
+    tag = '순항';
+    txt = `균형 잡힌 상태입니다. 연료 ${fmt(R.fuel*3600,0)} kg/h 로 ${fmt(R.thrust/1000,0)} kN 을 냅니다.
+           이 출력 부근이 대체로 연료 효율이 가장 좋습니다.`;
+  } else {
+    tag = '저출력 비행';
+    txt = `속도를 높이거나 상승하는 중일 때의 출력입니다. 팬을 적게 돌리면 압축되는 공기도 적고
+           연료 소모도 줄지만, <b>추력은 N1의 제곱에 비례해 줄어듭니다.</b>
+           지금 ${fmt(n,0)}% 출력으로 ${fmt(R.thrust/1000,0)} kN.`;
+  }
+  $('regimeTag').textContent = tag;
+  $('explain').innerHTML = txt;
+}
+
+/* ==========================================================================
+   7. TSFC 지도
+   ========================================================================== */
+const MAP = { alt0:0, alt1:13000, m0:0.40, m1:1.00, rows:9, cols:13, target:60e3,
+              cells:null, best:null, lo:0, hi:0 };
+function buildMap(){
+  MAP.cells = []; MAP.best = {v:1e9, alt:0, m:0, n1:0};
+  MAP.lo = 1e9; MAP.hi = 0;
+  for(let r=0;r<MAP.rows;r++){
+    const row = [];
+    const alt = MAP.alt0 + (MAP.alt1-MAP.alt0)*(r/(MAP.rows-1));
+    for(let c=0;c<MAP.cols;c++){
+      const m = MAP.m0 + (MAP.m1-MAP.m0)*(c/(MAP.cols-1));
+      const V  = machToVel(m, alt);
+      const n1 = n1ForThrust(MAP.target, alt, V);
+      const t  = n1>100.5 ? NaN : solve(n1, alt, V).tsfc;
+      row.push({alt, m, V, n1, t});
+      if(isFinite(t)){
+        if(t<MAP.best.v) MAP.best = {v:t, alt, m, n1};
+        if(t<MAP.lo) MAP.lo = t;
+        if(t>MAP.hi) MAP.hi = t;
+      }
+    }
+    MAP.cells.push(row);
+  }
+}
+function heat(v){                       // TSFC 가 작을수록 진한 초록
+  const t = clamp01(1-(v-MAP.lo)/(MAP.hi-MAP.lo));
+  const c0=[196,64,128], c1=[46,86,168], c2=[40,160,130], c3=[130,225,120];
+  let a,b,u;
+  if(t<1/3){ a=c0;b=c1;u=t*3; } else if(t<2/3){ a=c1;b=c2;u=(t-1/3)*3; } else { a=c2;b=c3;u=(t-2/3)*3; }
+  return [a[0]+(b[0]-a[0])*u, a[1]+(b[1]-a[1])*u, a[2]+(b[2]-a[2])*u];
+}
+function drawMap(){
+  if(!MAP.cells) buildMap();
+  const c = $('map'), mg = fitCanvas(c, 1000, 250);
+  const L=66, RP=10, TP=10, BT=32;
+  const cw = (1000-L-RP)/MAP.cols, ch = (250-TP-BT)/MAP.rows;
+  for(let r=0;r<MAP.rows;r++) for(let q=0;q<MAP.cols;q++){
+    const cell = MAP.cells[r][q];
+    const x = L+q*cw, y = TP+r*ch;
+    if(!isFinite(cell.t)){ mg.fillStyle='#141c26'; mg.fillRect(x,y,cw-1,ch-1); continue; }
+    const col = heat(cell.t);
+    mg.fillStyle = `rgb(${col[0]|0},${col[1]|0},${col[2]|0})`;
+    mg.fillRect(x, y, cw-1, ch-1);
+  }
+  mg.font = '12px -apple-system,"Apple SD Gothic Neo",sans-serif';
+  mg.fillStyle = '#8fa3ba'; mg.textAlign='center'; mg.textBaseline='top';
+  for(let q=0;q<MAP.cols;q+=2){
+    const m = MAP.m0 + (MAP.m1-MAP.m0)*(q/(MAP.cols-1));
+    mg.fillText('M'+m.toFixed(2), L+q*cw+cw/2, TP+MAP.rows*ch+5);
+  }
+  mg.textAlign='right'; mg.textBaseline='middle';
+  for(let r=0;r<MAP.rows;r++){
+    const alt = MAP.alt0 + (MAP.alt1-MAP.alt0)*(r/(MAP.rows-1));
+    mg.fillText((alt/1000).toFixed(1), L-6, TP+r*ch+ch/2);
+  }
+  mg.save(); mg.translate(15, TP+MAP.rows*ch/2); mg.rotate(-Math.PI/2);
+  mg.textAlign='center'; mg.textBaseline='middle';
+  mg.fillText('고도 km', 0, 0); mg.restore();
+
+  const bc = MAP.best;
+  const bx = L + (bc.m-MAP.m0)/(MAP.m1-MAP.m0)*(MAP.cols*cw);
+  const byy= TP + (bc.alt-MAP.alt0)/(MAP.alt1-MAP.alt0)*(MAP.rows*ch);
+  mg.fillStyle = '#ffe27a'; mg.font = '19px serif'; mg.textAlign='center'; mg.textBaseline='middle';
+  mg.fillText('★', bx, byy);
+
+  const px = L + clamp01((R.M0-MAP.m0)/(MAP.m1-MAP.m0))*MAP.cols*cw;
+  const py = TP + clamp01((S.a-MAP.alt0)/(MAP.alt1-MAP.alt0))*MAP.rows*ch;
+  mg.strokeStyle = '#fff'; mg.lineWidth = 2;
+  mg.beginPath(); mg.arc(px, py, 8, 0, TAU); mg.stroke();
+  mg.beginPath();
+  mg.moveTo(px-14,py); mg.lineTo(px-5,py); mg.moveTo(px+5,py); mg.lineTo(px+14,py);
+  mg.moveTo(px,py-14); mg.lineTo(px,py-5); mg.moveTo(px,py+5); mg.lineTo(px,py+14);
+  mg.stroke();
+}
+
+/* ==========================================================================
+   8. 이벤트 · 루프
+   ========================================================================== */
+function syncInputs(){
+  $('thr').value = S.t; $('alt').value = S.a; $('spd').value = S.v;
+  $('thrV').textContent = fmt(S.t,0)+' %';
+  $('altV').textContent = fmt(S.a,0)+' m';
+  $('spdV').textContent = fmt(S.v,0)+' m/s';
+}
+function recompute(){ R = solve(S.t, S.a, S.v); paint(); describe(); }
+$('thr').addEventListener('input', e=>{ S.t=+e.target.value; $('thrV').textContent=fmt(S.t,0)+' %'; recompute(); });
+$('alt').addEventListener('input', e=>{ S.a=+e.target.value; $('altV').textContent=fmt(S.a,0)+' m'; recompute(); });
+$('spd').addEventListener('input', e=>{ S.v=+e.target.value; $('spdV').textContent=fmt(S.v,0)+' m/s'; recompute(); });
+document.querySelectorAll('[data-p]').forEach(b=>{
+  b.addEventListener('click', ()=>{
+    const p = PRESETS[b.dataset.p];
+    S.t=p.t; S.a=p.a; S.v=p.v; syncInputs(); recompute();
+  });
+});
+$('playBtn').addEventListener('click', e=>{
+  S.playing = !S.playing;
+  e.target.textContent = S.playing ? '⏸ 흐름 일시정지' : '▶ 흐름 재생';
+  e.target.classList.toggle('on', S.playing);
+});
+$('traceBtn').addEventListener('click', e=>{ S.flow=!S.flow; e.target.classList.toggle('on',S.flow); });
+$('cutBtn').addEventListener('click', e=>{ S.cut=!S.cut; e.target.classList.toggle('on',S.cut); });
+
+$('optBtn').addEventListener('click', ()=>{
+  if(!MAP.cells) buildMap();
+  const b = MAP.best;
+  $('optMsg').innerHTML = `이 모델에서는 <b>${(b.alt/1000).toFixed(1)} km · 마하 ${b.m.toFixed(2)}</b> 부근이
+    가장 효율적입니다 (TSFC <b>${b.v.toFixed(1)}</b> kg/(kN·h), N1 약 ${b.n1.toFixed(0)}%).<br>
+    <b>이유</b> — 고도가 높을수록 <b>바깥 공기 항력</b>이 작아져 적은 출력(적은 연료)으로 날 수 있고,
+    속도가 빠를수록 <b>램 효과</b>로 팬의 압력 상승을 더 적은 공기로 얻기 때문입니다.
+    대신 너무 빠르면 팬 날개끝이 초음속이 되어 효율이 다시 떨어집니다.
+    지도에서 진한 녹색이 ${MAP.lo.toFixed(0)} kg/(kN·h), 가장 옅은 색이 ${MAP.hi.toFixed(0)} kg/(kN·h) 입니다.`;
+  drawMap();
+});
+$('hereBtn').addEventListener('click', ()=>{
+  const need = n1ForThrust(MAP.target, S.a, S.v);
+  S.t = Math.round(clamp01(need/105)*105);
+  syncInputs(); recompute(); drawMap();
+  $('optMsg').innerHTML = isFinite(need)
+    ? `지금 고도 <b>${fmt(S.a,0)} m</b>, 속도 <b>${fmt(S.v,0)} m/s</b>(마하 ${fmt(R.M0,2)})에서
+       추력 60 kN을 내려면 N1 <b>${fmt(need,0)}%</b>가 필요합니다. 스로틀을 그 값으로 맞췄습니다.`
+    : `이 고도·속도에서는 이 엔진으로 60 kN을 낼 수 없습니다. 고도를 낮추거나 속도를 높여 보세요.`;
+});
+
+let last = performance.now();
+function loop(now){
+  const dt = Math.min(0.05, (now-last)/1000); last = now;
+  stepParticles(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+function resize(){
+  g = fitCanvas(cv, VW, VH);
+  SC = VW/Math.max(cv.clientWidth,1);
+  drawMap();
+}
+let rz;
+window.addEventListener('resize', ()=>{ clearTimeout(rz); rz = setTimeout(resize, 130); });
+
+resize();
+syncInputs(); recompute(); buildMap(); drawMap();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
