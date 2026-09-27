@@ -683,7 +683,7 @@ jet:{
     const F=Math.max(0,Ffan+Fcore-drag);
     const vMix=(ve*core+vb*byp)/ma;
 
-    const fMin=100*CP*Tt2*(Math.pow(p.opr,(GAMMA-1)/GAMMA)-1)/(0.95*LHV);
+    const fMin=100*CP*Tt2*(Math.pow(p.opr,(GAMMA-1)/GAMMA)-1)/(0.95*LHV*(1+p.bpr));
 
     return {
       v:M0*at.a,ve,vb,F:F/1000,Ffan:Ffan/1000,Fcore:Fcore/1000,drag:drag/1000,fMin,
@@ -693,7 +693,7 @@ jet:{
     };
   },
   res:d=>[
-    ['추력',fmt(d.F,0),'kN',d.F>80?'ok':d.F>30?'warn':'bad'],
+    ['추력',fmt(d.F,0),'kN',d.F>50?'ok':d.F>20?'warn':'bad'],
     ['연료 소비',fmt(d.fuel,1),'t/h',d.fuel<6?'ok':d.fuel<20?'warn':'bad'],
     ['연료 소모율',fmt(d.tsfc,1),'kg/kN·h',d.tsfc<20?'ok':d.tsfc<35?'warn':'bad'],
     ['추력 효율',fmt(d.etaP,1),'%',d.etaP>65?'ok':d.etaP>50?'warn':'bad'],
@@ -708,8 +708,8 @@ jet:{
       그리고 지금 고도 ${fmt(this.p.alt/1000,1)} km에서 해면으로 내려오면 추력이 <b>${fmt(r.F,0)} kN에서 ${fmt(sea.F,0)} kN</b> 로
       ${sea.F>r.F*1.3?'<b>훨씬</b> ':''}늘어납니다. 공기가 두 배도 안 되게 얇아지기 때문입니다.
       그래서 비행기는 이륙할 때만 해면을 쓰는 것이 아닙니다.
-      그리고 지금 연료공기비 ${fmt(this.p.f,1)}퍼센트를 유지하려면 최소 <b>${fmt(r.fMin,1)}퍼센트</b>가 필요합니다.
-      이보다 낮게 내리면 압축기를 돌릴 에너지가 모자라는, 실제로는 존재하지 않는 영역입니다.`;
+      그리고 압축기를 돌리는 데 필요한 최소 연료공기비는 <b>${fmt(r.fMin,2)}퍼센트</b>입니다.
+      ${this.p.f<r.fMin?'지금 설정은 이보다 낮아 압축기에 에너지가 모자라는 <b>물리적으로 불가능한 영역</b>입니다. 순수 터보제트는 압축 압력이 커서 연료가 훨씬 많이 필요하기 때문입니다.':'바이패스가 커질수록 우회 공기가 많아 압축기를 통과하는 양이 줄고, 그래서 필요한 최소 연료량도 함께 줄어듭니다.'}`;
   },
   draw(c,w,h,d){
     c.clearRect(0,0,w,h);
